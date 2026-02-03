@@ -1,43 +1,45 @@
-name: Build OSTAR MT7688AN Firmware
+name: Build OSTAR Firmware
 
 on:
-  workflow_dispatch:
-  push:
+  workflow_dispatch:  # 手动触发
+  push:               # 推代码时自动触发（可选）
     branches: [ostar-19.07]
+  schedule:
+    - cron: '0 0 * * 0'  # 每周日凌晨自动构建（可选）
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # 或 ubuntu-latest，但 22.04 更稳
+    runs-on: ubuntu-22.04  # 或 ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ostar-19.07
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: ostar-19.07  # 你的默认分支
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential asciidoc binutils bzip2 flex gawk gcc-multilib gettext git git-core libncurses5-dev libncurses-dev libssl-dev make patch perl python3 python3-setuptools python3-distutils rsync subversion swig time unzip wget zlib1g-dev libz-dev libc6-dev file curl ccache
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python3-setuptools python3-dev rsync subversion swig time unzip zlib1g-dev lib32gcc-s1 libc6-dev-i386 g++-multilib flex quilt libssl-dev xsltproc libxml-parser-perl mercurial bzr ecj fastjar wget curl file ccache
 
-      - name: Update and install feeds
-        run: |
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+    - name: Update feeds
+      run: |
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
 
-      - name: Prepare config
-        run: |
-          cp config.mt76x8 .config   # 或 config.mt76x8-i2c-oled 等，根据需要
-          make defconfig
+    - name: Prepare config (MT76x8 example)
+      run: |
+        cp config.mt76x8 .config   # 或用 config.mt76x8-i2c-oled 等，根据需要换
+        make defconfig
 
-      - name: Download dependencies
-        run: make download -j$(nproc) || true
+    - name: Download sources (加速第一次)
+      run: make download -j$(nproc) || true
 
-      - name: Build firmware
-        run: make -j$(nproc) V=s   # V=s 显示详细日志
+    - name: Build firmware
+      run: make -j$(nproc) V=s   # V=s 显示详细日志，便于 debug
 
-      - name: Upload firmware artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ostar-firmware-mt76x8
-          path: bin/targets/ramips/mt76x8/*.bin
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ostar-firmware-mt76x8
+        path: bin/targets/ramips/mt76x8/openwrt-*.bin   # 根据实际路径调整，可能在 openwrt-ramips-mt76x8-*.bin
