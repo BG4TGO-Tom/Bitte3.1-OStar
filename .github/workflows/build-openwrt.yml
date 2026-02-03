@@ -27,13 +27,13 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # 稳定预装开发工具，避免 24.04 坑
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 初始化环境（添加 bison flex bc 等 prereq 必需工具）
+      - name: 初始化环境（补齐 prereq 工具）
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -61,15 +61,14 @@ jobs:
       - name: 配置 feeds 并更新
         run: |
           cd openwrt
-          cp feeds.conf.default feeds.conf || echo "No feeds.conf.default, skipping"
+          cp feeds.conf.default feeds.conf || echo "No feeds.conf.default"
           ./scripts/feeds update -a
 
-      - name: 安装 feeds 包（匹配 README）
+      - name: 安装 feeds 包
         run: |
           cd openwrt
           ./scripts/feeds install luci-base luci-lib-base luci-compat luci-mod-status luci-mod-system luci-proto-ipv6 stm32flash || true
           ./scripts/feeds install -a -pmmdvm || true
-
           if [[ "${{ env.CONFIG_FILE }}" == config.mt76x8* ]]; then
             ./scripts/feeds install travelmate luci-app-travelmate luci-i18n-travelmate-zh-cn || true
           fi
@@ -84,7 +83,7 @@ jobs:
             chmod +x "$GITHUB_WORKSPACE/diy-part1.sh"
             "$GITHUB_WORKSPACE/diy-part1.sh"
           else
-            echo "No diy-part1.sh, skipping"
+            echo "No diy-part1.sh"
           fi
 
       - name: 加载配置
@@ -95,7 +94,7 @@ jobs:
           elif [ -f "${{ env.CONFIG_FILE }}" ]; then
             cp "${{ env.CONFIG_FILE }}" .config
           else
-            echo "错误：配置文件 ${{ env.CONFIG_FILE }} 未找到！请把 config 文件放到仓库根目录。"
+            echo "错误：配置文件 ${{ env.CONFIG_FILE }} 未找到"
             exit 1
           fi
           make defconfig
@@ -107,10 +106,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: 强制运行 prereq 检查（FORCE=1 跳过严格失败）
+      - name: 强制 prereq（跳过常见失败）
         run: |
           cd openwrt
-          make prereq FORCE=1 || true  # 忽略常见 ldconfig-stub/mkhash 等假失败
+          make prereq FORCE=1 || true
 
       - name: 下载包
         run: |
@@ -118,11 +117,11 @@ jobs:
           make download -j8 || true
           find dl -size -1024c -delete || true
 
-      - name: 编译固件（FORCE=1 防 prereq 卡住）
+      - name: 编译固件（使用 FORCE=1 绕过 prereq）
         id: compile
         run: |
           cd openwrt
-          echo "编译线程: 最多 4 (19.07 防 OOM)"
+          echo "编译线程: 最多 4"
           make -j4 V=s FORCE=1 || make -j2 V=s FORCE=1 || make -j1 V=s FORCE=1
           if [ $? -eq 0 ]; then
             echo "status=success" >> $GITHUB_OUTPUT
@@ -141,21 +140,21 @@ jobs:
           name: OSTAR_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: openwrt/bin
 
-      - name: 整理并上传固件文件
+      - name: 整理并上传固件
         if: steps.compile.outputs.status == 'success'
         run: |
           cd openwrt/bin/targets/*/* || exit 1
           rm -rf packages || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
-      - name: 上传干净固件 artifact
+      - name: 上传固件 artifact
         if: steps.compile.outputs.status == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: OSTAR_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
-      - name: 清理旧 workflow runs
+      - name: 清理旧 runs
         uses: GitRML/delete-workflow-runs@main
         with:
           retain_days: 7
