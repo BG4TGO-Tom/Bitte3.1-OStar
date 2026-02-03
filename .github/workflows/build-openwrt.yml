@@ -27,25 +27,23 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # 切换到这个！预装开发工具，不会再报 no candidate
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 初始化环境 + 安装依赖（Ubuntu 24.04 最终修复）
+      - name: 初始化环境（22.04 已预装大部分依赖）
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get update -qq
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository universe -y
-          sudo apt-get update -qq
           sudo apt-get install -y \
-            build-essential gettext subversion xsltproc gawk git unzip \
-            zlib1g-dev libncurses5-dev libssl-dev python3 python3-setuptools \
-            rsync patch binutils bzip2 make findutils grep diffutils perl \
-            libz-dev libc6-dev file git-core
+            build-essential gettext subversion xsltproc \
+            gawk git unzip zlib1g-dev libncurses5-dev libssl-dev \
+            python3 python3-setuptools rsync patch binutils bzip2 make \
+            findutils grep diffutils perl libz-dev libc6-dev file git-core
           sudo apt-get autoremove --purge -qq
           sudo apt-get clean -qq
           sudo timedatectl set-timezone "$TZ"
@@ -62,14 +60,15 @@ jobs:
       - name: 配置 feeds 并更新
         run: |
           cd openwrt
-          cp feeds.conf.default feeds.conf || echo "No feeds.conf.default"
+          cp feeds.conf.default feeds.conf || echo "No feeds.conf.default, skipping"
           ./scripts/feeds update -a
 
-      - name: 安装 feeds 包（README 匹配）
+      - name: 安装 feeds 包（匹配 README）
         run: |
           cd openwrt
           ./scripts/feeds install luci-base luci-lib-base luci-compat luci-mod-status luci-mod-system luci-proto-ipv6 stm32flash || true
           ./scripts/feeds install -a -pmmdvm || true
+
           if [[ "${{ env.CONFIG_FILE }}" == config.mt76x8* ]]; then
             ./scripts/feeds install travelmate luci-app-travelmate luci-i18n-travelmate-zh-cn || true
           fi
@@ -77,14 +76,14 @@ jobs:
             ./scripts/feeds install luci-mod-admin-full || true
           fi
 
-      - name: 执行 diy-part1.sh（可选）
+      - name: 执行 diy-part1.sh（如果存在）
         run: |
           cd openwrt
           if [ -f "$GITHUB_WORKSPACE/diy-part1.sh" ]; then
             chmod +x "$GITHUB_WORKSPACE/diy-part1.sh"
             "$GITHUB_WORKSPACE/diy-part1.sh"
           else
-            echo "No diy-part1.sh"
+            echo "No diy-part1.sh, skipping"
           fi
 
       - name: 加载配置
@@ -95,12 +94,12 @@ jobs:
           elif [ -f "${{ env.CONFIG_FILE }}" ]; then
             cp "${{ env.CONFIG_FILE }}" .config
           else
-            echo "错误: ${{ env.CONFIG_FILE }} 未找到"
+            echo "错误：配置文件 ${{ env.CONFIG_FILE }} 未找到！请把 config.mt76x8 等文件放到仓库根目录。"
             exit 1
           fi
           make defconfig
 
-      - name: SSH 调试
+      - name: SSH 调试（可选）
         uses: P3TERX/ssh2actions@v1.0.0
         if: github.event.inputs.ssh == 'true' || contains(github.event.action, 'ssh')
         env:
@@ -117,7 +116,7 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          echo "编译线程: 最多 4 (19.07 防 OOM)"
+          echo "编译线程: 最多 4 (19.07 时代防内存溢出)"
           make -j4 V=s || make -j2 V=s || make -j1 V=s
           if [ $? -eq 0 ]; then
             echo "status=success" >> $GITHUB_OUTPUT
@@ -129,28 +128,28 @@ jobs:
           echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-      - name: 上传 bin 目录
+      - name: 上传完整 bin 目录
         if: steps.compile.outputs.status == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: OSTAR_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: openwrt/bin
 
-      - name: 整理固件
+      - name: 整理并上传固件文件
         if: steps.compile.outputs.status == 'success'
         run: |
           cd openwrt/bin/targets/*/* || exit 1
           rm -rf packages || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
-      - name: 上传固件 artifact
+      - name: 上传干净固件 artifact
         if: steps.compile.outputs.status == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: OSTAR_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
-      - name: 清理旧 runs
+      - name: 清理旧 workflow runs
         uses: GitRML/delete-workflow-runs@main
         with:
           retain_days: 7
