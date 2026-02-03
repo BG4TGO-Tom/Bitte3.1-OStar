@@ -33,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 初始化环境（补齐 prereq 工具）
+      - name: 初始化环境
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -106,7 +106,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: 强制 prereq（跳过常见失败）
+      - name: 强制 prereq（忽略 Python 2.x 检查）
         run: |
           cd openwrt
           make prereq FORCE=1 || true
@@ -114,14 +114,14 @@ jobs:
       - name: 下载包
         run: |
           cd openwrt
-          make download -j8 || true
+          make download -j8 FORCE=1 || true
           find dl -size -1024c -delete || true
 
-      - name: 编译固件（使用 FORCE=1 绕过 prereq）
+      - name: 编译固件（关键：FORCE=1 绕过 Python 2.x 要求）
         id: compile
         run: |
           cd openwrt
-          echo "编译线程: 最多 4"
+          echo "开始编译（FORCE=1 已启用，忽略 prereq 失败）"
           make -j4 V=s FORCE=1 || make -j2 V=s FORCE=1 || make -j1 V=s FORCE=1
           if [ $? -eq 0 ]; then
             echo "status=success" >> $GITHUB_OUTPUT
