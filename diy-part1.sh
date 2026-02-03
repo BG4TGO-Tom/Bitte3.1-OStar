@@ -1,4 +1,4 @@
 src-git packages https://git.openwrt.org/feed/packages.git;openwrt-19.07
 src-git luci https://github.com/lazywalker/luci.git;ostar-19.07
-src-git mmdvm https://github.com/lazywalker/mmdvm-openwrt
-src-git devtools https://github.com/lazywalker/devtools-feeds
+src-git mmdvm https://github.com/lazywalker/mmdvm-openwrt.git
+src-git devtools https://github.com/lazywalker/devtools-feeds.git
